@@ -50,13 +50,18 @@ public extension UDS {
 
 extension UDS.Message: CustomStringConvertible {
     
-    public var description: String {
-        
-        let id = "\(self.id, radix: .hex)"
-        let endIndex = min(self.bytes.endIndex, 16)
-        let bytes: [UInt8] = Array(self.bytes[0..<endIndex])
-        let message = "\(bytes, radix: .hex, toWidth: 2)"
-        let truncated = endIndex < self.bytes.endIndex ? " (...)" : ""
-        return "\(id) [\(bytes.count)] \(message)\(truncated)"
-    }
+public var description: String {
+
+    let id = "\(self.id, radix: .hex)"
+    let endIndex = min(self.bytes.endIndex, 16)
+    let bytes: [UInt8] = Array(self.bytes[0..<endIndex])
+
+    let message = bytes
+        .map { String(format: "%02X", $0) }
+        .joined(separator: " ")
+
+    let truncated = endIndex < self.bytes.endIndex
+
+    return "\(id) [\(bytes.count)] \(message)\(truncated ? "..." : "")"
+}
 }
