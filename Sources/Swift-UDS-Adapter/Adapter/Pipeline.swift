@@ -63,47 +63,80 @@ extension UDS {
 
         /// Send a requested service command down the pipeline and returns the result asynchronously.
         /// NOTE: If the pipeline is busy, this might take a while.
-        public func send(to: UDS.Header, reply: UDS.Header = 0, service: UDS.Service) async throws -> UDS.Message {
-            // check whether there is another command running
-            while let task = self.currentTask {
-                _ = try? await task.value
-            }
+public func send(
+    to: UDS.Header,
+    reply: UDS.Header = 0,
+    service: UDS.Service
+) async throws -> UDS.Message {
 
-            self.currentTask = Task<UDS.Message, Swift.Error> {
-                defer { self.currentTask = nil }
-                let payload = service.payload
-                guard payload.count > 0 else { throw UDS.Error.malformedService }
-                let message = UDS.Message(id: to, reply: reply, bytes: payload)
+    // Check whether there is another command running
+    while let task = self.currentTask {
+        _ = try? await task.value
+    }
 
-                guard let logFile = self.logFile else {
-                    return try await self.adapter.sendUDS(message)
-                }
+    self.currentTask = Task<UDS.Message, Swift.Error> {
+        defer { self.currentTask = nil }
 
-                let requestString = "\(message.id, radix: .hex),\(payload, radix: .hex, toWidth: 2)\n"
-                
-                do {
-                    let reply = try await self.adapter.sendUDS(message)
-                    let replyString = "\(reply.id, radix: .hex),\(reply.bytes, radix: .hex, toWidth: 2)\n"
+        let payload = service.payload
 
-                    self.logQ.async {
-                        try? logFile.write(contentsOf: requestString.data(using: .utf8)!)
-                        try? logFile.write(contentsOf: replyString.data(using: .utf8)!)
-                    }
-                    return reply
-                } catch {
-                    let replyString = "ERROR: \(error)\n"
-                    
-                    self.logQ.async {
-                        try? logFile.write(contentsOf: requestString.data(using: .utf8)!)
-                        try? logFile.write(contentsOf: replyString.data(using: .utf8)!)
-                    }
-                    throw error
-                }
-            }
-            
-            let result = try await self.currentTask!.value
-            return result
+        guard payload.count > 0 else {
+            throw UDS.Error.malformedService
         }
+
+        let message = UDS.Message(
+            id: to,
+            reply: reply,
+            bytes: payload
+        )
+
+        guard let logFile = self.logFile else {
+            return try await self.adapter.sendUDS(message)
+        }
+
+        // Convert [UInt8] payload to hex string
+        let payloadHex = payload
+            .map { String(format: "%02X", $0) }
+            .joined(separator: " ")
+
+        let requestString = "\(message.id, radix: .hex),\(payloadHex)\n"
+
+        do {
+            let reply = try await self.adapter.sendUDS(message)
+
+            let replyString = "\(reply)\n"
+
+            self.logQ.async {
+                try? logFile.write(
+                    contentsOf: requestString.data(using: .utf8)!
+                )
+
+                try? logFile.write(
+                    contentsOf: replyString.data(using: .utf8)!
+                )
+            }
+
+            return reply
+
+        } catch {
+            let replyString = "ERROR: \(error)\n"
+
+            self.logQ.async {
+                try? logFile.write(
+                    contentsOf: requestString.data(using: .utf8)!
+                )
+
+                try? logFile.write(
+                    contentsOf: replyString.data(using: .utf8)!
+                )
+            }
+
+            throw error
+        }
+    }
+
+    let result = try await self.currentTask!.value
+    return result
+}
     }
 }
 
