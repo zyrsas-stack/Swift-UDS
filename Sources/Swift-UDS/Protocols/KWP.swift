@@ -39,36 +39,39 @@ public extension UDS.KWP {
 }
 
 private extension UDS.KWP.Decoder {
-
     func decodeMultiFrame(payload bytes: [UInt8]) throws -> [UInt8] {
-        var result: [UInt8] = []
-        var expectedFrame = 1
+    var result: [UInt8] = []
+    var expectedFrame = 1
 
-        for chunk in bytes.cc_chunked(size: 8) {
-            let frame = chunk[2]
+    for startIndex in stride(from: 0, to: bytes.count, by: 8) {
+        let endIndex = min(startIndex + 8, bytes.count)
+        let chunk = Array(bytes[startIndex..<endIndex])
 
-        //FIXME: Should we check the checksum and filter invalid frames?
-        //let checksum = chunk[7]
-
-            guard frame == expectedFrame else {
-                let chunkHex = chunk
-                    .map { String(format: "0x%02X", $0) }
-                    .joined(separator: " ")
-
-                throw UDS.Error.decoderError(
-                    string: "Expected frame \(expectedFrame), but got \(frame) in chunk \(chunkHex)"
-                )
-            }
-
-            if frame == 1 {
-                result.append(chunk[0])
-                result.append(chunk[1])
-            }
-
-            result += chunk[3..<7]
-            expectedFrame += 1
+        guard chunk.count >= 7 else {
+            continue
         }
 
-        return result
+        let frame = chunk[2]
+
+        guard frame == expectedFrame else {
+            let chunkHex = chunk
+                .map { String(format: "0x%02X", $0) }
+                .joined(separator: " ")
+
+            throw UDS.Error.decoderError(
+                string: "Expected frame \(expectedFrame), but got \(frame) in chunk \(chunkHex)"
+            )
+        }
+
+        if frame == 1 {
+            result.append(chunk[0])
+            result.append(chunk[1])
+        }
+
+        result += chunk[3..<7]
+        expectedFrame += 1
     }
+
+    return result
+}
 }
